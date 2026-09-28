@@ -1,23 +1,25 @@
 import { ChangeEvent, DragEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Album, ChevronLeft, ChevronRight, FolderOpen, Grid2X2, Heart, History,
+  ChevronLeft, ChevronRight, FolderOpen, Grid2X2, Heart, History,
   ListMusic, LoaderCircle, MoreHorizontal, Music2, Pause, Play, Plus,
   Repeat2, Search, Settings2, Shuffle, SkipBack, SkipForward, SlidersHorizontal,
-  Sparkles, Volume2, X,
+  Volume2, X,
 } from "lucide-react";
 import { GlideSelect } from "./components/GlideSelect";
 import { GlareHover } from "./components/GlareHover";
 import { useAudioPlayer } from "./player/useAudioPlayer";
 import { assetUrl, importNativePaths, loadNativeLibrary, pickNativeAudioFiles, pickNativeFolder, scanNativeFolder, type NativeTrack } from "./services/native-library";
 
-type Track = { id: string; path?: string; artwork?: string; title: string; artist: string; album: string; url: string; duration?: number; favorite: boolean };
-type View = "home" | "songs" | "albums" | "artists" | "playlists" | "favorites" | "recent" | "settings";
+type Track = { id: string; path?: string; artwork?: string; title: string; artist: string; album: string; url: string; duration?: number; codec?: string; bitrate?: number; sampleRate?: number; channels?: number; favorite: boolean };
+type View = "home" | "songs" | "favorites" | "recent" | "settings";
+
+const FAVORITES_KEY = "flopsic.favorite-track-ids.v1";
+function loadFavoriteIds() { try { return new Set<string>(JSON.parse(localStorage.getItem(FAVORITES_KEY) ?? "[]")); } catch { return new Set<string>(); } }
 
 const accepted = ["audio/mpeg", "audio/flac", "audio/wav", "audio/ogg", "audio/opus", "audio/mp4", "audio/aac"];
 const nav: { id: View; label: string; icon: typeof Grid2X2 }[] = [
   { id: "home", label: "Home", icon: Grid2X2 }, { id: "songs", label: "Songs", icon: Music2 },
-  { id: "albums", label: "Albums", icon: Album }, { id: "artists", label: "Artists", icon: Sparkles },
-  { id: "playlists", label: "Playlists", icon: ListMusic }, { id: "favorites", label: "Favorites", icon: Heart },
+  { id: "favorites", label: "Favorites", icon: Heart },
   { id: "recent", label: "Recently played", icon: History },
 ];
 
@@ -27,7 +29,7 @@ function fileToTrack(file: File): Track {
 }
 
 function nativeToTrack(track: NativeTrack): Track {
-  return { id: track.id, path: track.path, artwork: track.artworkPath ? assetUrl(track.artworkPath) : undefined, title: track.title, artist: track.artist, album: track.album, url: assetUrl(track.path), duration: track.duration, favorite: false };
+  return { id: track.id, path: track.path, artwork: track.artworkPath ? assetUrl(track.artworkPath) : undefined, title: track.title, artist: track.artist, album: track.album, url: assetUrl(track.path), duration: track.duration, codec: track.codec, bitrate: track.bitrate, sampleRate: track.sampleRate, channels: track.channels, favorite: loadFavoriteIds().has(track.id) };
 }
 
 export function App() {
@@ -63,7 +65,11 @@ export function App() {
     const newTracks = nativeTracks.map(nativeToTrack);
     setTracks((existing) => {
       const indexed = new Map(existing.map((track) => [track.path ?? track.id, track]));
-      newTracks.forEach((track) => indexed.set(track.path ?? track.id, track));
+      newTracks.forEach((track) => {
+        const key = track.path ?? track.id;
+        const prior = indexed.get(key);
+        indexed.set(key, prior ? { ...track, favorite: prior.favorite } : track);
+      });
       return [...indexed.values()];
     });
     setQueue((existing) => [...existing, ...newTracks.filter((track) => !existing.some((queued) => queued.id === track.id))]);
@@ -77,7 +83,11 @@ export function App() {
   const playTrack = (track: Track) => { setQueue((old) => old.some((item) => item.id === track.id) ? old : [...old, track]); selectTrack(track, true); };
   const next = () => { const list = queue.length ? queue : tracks; if (!list.length) return; const index = current ? list.findIndex((item) => item.id === current.id) : -1; playTrack(list[(index + 1) % list.length]); };
   const previous = () => { if (progress > 3 && audio.current) { audio.current.currentTime = 0; return; } const list = queue.length ? queue : tracks; const index = current ? list.findIndex((item) => item.id === current.id) : 0; playTrack(list[(index - 1 + list.length) % list.length]); };
-  const toggleFavorite = (id: string) => setTracks((items) => items.map((item) => item.id === id ? { ...item, favorite: !item.favorite } : item));
+  const toggleFavorite = (id: string) => setTracks((items) => {
+    const nextItems = items.map((item) => item.id === id ? { ...item, favorite: !item.favorite } : item);
+    localStorage.setItem(FAVORITES_KEY, JSON.stringify(nextItems.filter((item) => item.favorite).map((item) => item.id)));
+    return nextItems;
+  });
   const visibleTracks = view === "favorites" ? filtered.filter((track) => track.favorite) : filtered;
 
   return <main className="app" onDragOver={(event) => { event.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={onDrop}>
@@ -107,13 +117,12 @@ function Home({ tracks, onImport, onPlay }: { tracks: Track[]; onImport: () => v
 }
 
 function Library({ view, tracks, query, onPlay, onFavorite }: { view: View; tracks: Track[]; query: string; onPlay: (t: Track) => void; onFavorite: (id: string) => void }) {
-  const labels: Partial<Record<View, string>> = { songs: "Songs", albums: "Albums", artists: "Artists", playlists: "Playlists", favorites: "Favorites", recent: "Recently played" };
-  if (view === "albums" || view === "artists" || view === "playlists") return <div className="library-page"><div className="page-title"><h1>{labels[view]}</h1><p>{view === "playlists" ? "Create playlists from the music you import." : "Your library will organize itself as you add music."}</p></div><div className="empty-state"><div className="empty-icon">{view === "albums" ? <Album /> : view === "artists" ? <Sparkles /> : <ListMusic />}</div><h2>Nothing to show yet</h2><p>Add some music and this view will fill in automatically.</p></div></div>;
+  const labels: Partial<Record<View, string>> = { songs: "Songs", favorites: "Favorites", recent: "Recently played" };
   return <div className="library-page"><div className="page-title row-title"><div><p className="eyebrow">{query ? "SEARCH RESULTS" : "LIBRARY"}</p><h1>{labels[view]}</h1></div><button className="icon-button"><SlidersHorizontal size={18} /> Filter</button></div>{tracks.length ? <TrackTable tracks={tracks} onPlay={onPlay} onFavorite={onFavorite} /> : <div className="empty-state"><div className="empty-icon"><Music2 /></div><h2>{query ? "No matching tracks" : "No tracks here yet"}</h2><p>{query ? "Try a different search term." : "Add music from the sidebar to begin."}</p></div>}</div>;
 }
 
 function TrackTable({ tracks, onPlay, onFavorite }: { tracks: Track[]; onPlay: (t: Track) => void; onFavorite: (id: string) => void }) { return <div className="track-table"><div className="track-header"><span>#</span><span>Title</span><span>Album</span><span>Time</span><span /></div>{tracks.map((track, index) => <div className="track-row" key={track.id} onDoubleClick={() => onPlay(track)}><span className="index">{index + 1}</span><button className="track-play" onClick={() => onPlay(track)} aria-label={`Play ${track.title}`}><Play size={14} fill="currentColor" /></button><div className="track-title"><GlareHover className="tiny-cover" style={{ width: 34, height: 34 }}>{track.artwork ? <img src={track.artwork} alt="" /> : track.title.slice(0, 1)}</GlareHover><div><strong>{track.title}</strong><small>{track.artist}</small></div></div><span className="album-name">{track.album}</span><span className="time">{track.duration ? formatTime(track.duration) : "-:--"}</span><button className={track.favorite ? "favorite on" : "favorite"} onClick={() => onFavorite(track.id)} aria-label="Favorite"><Heart size={17} fill={track.favorite ? "currentColor" : "none"} /></button></div>)}</div> }
 
-function Player(props: { current: Track | null; playing: boolean; progress: number; duration: number; volume: number; favorite: boolean; onToggle: () => void; onNext: () => void; onPrevious: () => void; onSeek: (v: number) => void; onVolume: (v: number) => void; onFavorite: () => void }) { const { current, playing, progress, duration } = props; return <footer className="player"><div className="now"><div className="now-cover">{current ? current.title.slice(0, 1) : <Music2 size={20} />}</div><div><strong>{current?.title ?? "Nothing playing"}</strong><small>{current?.artist ?? "Add music to get started"}</small></div><button className={props.favorite ? "favorite on" : "favorite"} disabled={!current} onClick={props.onFavorite}><Heart size={17} fill={props.favorite ? "currentColor" : "none"} /></button></div><div className="transport"><div className="controls"><button aria-label="Shuffle"><Shuffle size={16} /></button><button aria-label="Previous" onClick={props.onPrevious}><SkipBack size={18} fill="currentColor" /></button><button className="play-button" onClick={props.onToggle} aria-label={playing ? "Pause" : "Play"} disabled={!current}>{playing ? <Pause size={18} fill="currentColor" /> : <Play size={18} fill="currentColor" />}</button><button aria-label="Next" onClick={props.onNext}><SkipForward size={18} fill="currentColor" /></button><button aria-label="Repeat"><Repeat2 size={16} /></button></div><div className="timeline"><span>{formatTime(progress)}</span><input aria-label="Seek" type="range" min="0" max={duration || 0} step="0.1" value={Math.min(progress, duration || 0)} onChange={(e) => props.onSeek(Number(e.target.value))} disabled={!current} /><span>{duration ? `-${formatTime(Math.max(duration - progress, 0))}` : "-:--"}</span></div></div><div className="volume"><Volume2 size={18} /><input aria-label="Volume" type="range" min="0" max="1" step="0.01" value={props.volume} onChange={(e) => props.onVolume(Number(e.target.value))} /></div></footer> }
+function Player(props: { current: Track | null; playing: boolean; progress: number; duration: number; volume: number; favorite: boolean; onToggle: () => void; onNext: () => void; onPrevious: () => void; onSeek: (v: number) => void; onVolume: (v: number) => void; onFavorite: () => void }) { const { current, playing, progress, duration } = props; const technical = current ? [current.codec?.toUpperCase(), current.bitrate ? `${Math.round(current.bitrate / 1000)} kbps` : undefined, current.sampleRate ? `${Math.round(current.sampleRate / 1000)} kHz` : undefined, current.channels ? `${current.channels} ch` : undefined].filter(Boolean).join("  /  ") : ""; return <footer className="player"><div className="now"><div className="now-cover">{current?.artwork ? <img src={current.artwork} alt="" /> : current ? current.title.slice(0, 1) : <Music2 size={20} />}</div><div className="now-copy"><strong>{current?.title ?? "Nothing playing"}</strong><small>{current ? `${current.artist} · ${current.album}` : "Add music to get started"}</small>{technical && <span className="now-metadata">{technical}</span>}</div><button className={props.favorite ? "favorite on" : "favorite"} disabled={!current} onClick={props.onFavorite} aria-label={props.favorite ? "Remove from favorites" : "Add to favorites"}><Heart size={17} fill={props.favorite ? "currentColor" : "none"} /></button></div><div className="transport"><div className="controls"><button aria-label="Shuffle"><Shuffle size={16} /></button><button aria-label="Previous" onClick={props.onPrevious}><SkipBack size={18} fill="currentColor" /></button><button className="play-button" onClick={props.onToggle} aria-label={playing ? "Pause" : "Play"} disabled={!current}>{playing ? <Pause size={18} fill="currentColor" /> : <Play size={18} fill="currentColor" />}</button><button aria-label="Next" onClick={props.onNext}><SkipForward size={18} fill="currentColor" /></button><button aria-label="Repeat"><Repeat2 size={16} /></button></div><div className="timeline"><span>{formatTime(progress)}</span><input aria-label="Seek" type="range" min="0" max={duration || 0} step="0.1" value={Math.min(progress, duration || 0)} onChange={(e) => props.onSeek(Number(e.target.value))} disabled={!current} /><span>{duration ? `-${formatTime(Math.max(duration - progress, 0))}` : "-:--"}</span></div></div><div className="volume"><Volume2 size={18} /><input aria-label="Volume" type="range" min="0" max="1" step="0.01" value={props.volume} onChange={(e) => props.onVolume(Number(e.target.value))} /></div></footer> }
 function Settings() { const [theme, setTheme] = useState("dark"); return <div className="library-page settings-page"><div className="page-title"><p className="eyebrow">PREFERENCES</p><h1>Settings</h1><p>Choose how Flopsic looks and behaves on this computer.</p></div><div className="settings-grid"><section><h2>Interface</h2><label>Theme <GlideSelect ariaLabel="Theme" value={theme} onChange={setTheme} options={[{ value: "dark", label: "Dark", tag: "Default" }, { value: "system", label: "System" }, { value: "light", label: "Light" }]} /></label><label>Accent color <input type="color" defaultValue="#80aaff" /></label></section><section><h2>Playback</h2><label className="toggle-row">Gapless playback <input type="checkbox" defaultChecked /></label><label className="toggle-row">Restore queue on launch <input type="checkbox" defaultChecked /></label><label className="toggle-row">Loudness normalization <input type="checkbox" /></label></section></div></div> }
 function formatTime(value: number) { if (!Number.isFinite(value)) return "-:--"; const minutes = Math.floor(value / 60); const seconds = Math.floor(value % 60).toString().padStart(2, "0"); return `${minutes}:${seconds}`; }
