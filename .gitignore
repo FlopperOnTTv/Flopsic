@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.npm-cache/
+*.tsbuildinfo
+src-tauri/target/
+.vscode/
+.idea/
+*.log

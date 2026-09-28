@@ -1,0 +1,1 @@
+{"default":{"identifier":"default","description":"Default capability for Flopsic's desktop window.","local":true,"windows":["main"],"permissions":["core:default","dialog:default","fs:default","store:default"]}}

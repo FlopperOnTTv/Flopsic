@@ -1,0 +1,9 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Flopsic",
+  "version": "0.1.0",
+  "identifier": "com.flopsic.player",
+  "build": { "frontendDist": "../dist", "devUrl": "http://localhost:5173", "beforeDevCommand": "npm run dev", "beforeBuildCommand": "npm run build" },
+  "app": { "security": { "assetProtocol": { "enable": true, "scope": ["**"] } }, "windows": [{ "title": "Flopsic", "width": 1280, "height": 800, "minWidth": 960, "minHeight": 640, "resizable": true }] },
+  "bundle": { "active": true, "targets": "nsis", "windows": { "nsis": { "installMode": "currentUser", "displayLanguageSelector": false } } }
+}

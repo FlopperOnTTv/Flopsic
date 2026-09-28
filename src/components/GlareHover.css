@@ -1,0 +1,4 @@
+.glare-hover { background: var(--gh-bg); border-radius: var(--gh-br); border: 1px solid var(--gh-border); overflow: hidden; position: relative; display: grid; place-items: center; }
+.glare-hover::before { content: ""; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(var(--gh-angle), transparent 60%, var(--gh-rgba) 70%, transparent 100%); transition: background-position var(--gh-duration) ease; background-size: var(--gh-size) var(--gh-size), 100% 100%; background-repeat: no-repeat; background-position: -100% -100%, 0 0; }
+@media (hover: hover) and (pointer: fine) { .glare-hover:hover::before { background-position: 100% 100%, 0 0; } }
+@media (prefers-reduced-motion: reduce) { .glare-hover::before { transition: none; } }

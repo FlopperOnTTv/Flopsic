@@ -1,0 +1,32 @@
+{
+  "name": "flopsic",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "tauri": "tauri",
+    "desktop:dev": "tauri dev",
+    "desktop:build": "tauri build"
+  },
+  "dependencies": {
+    "@hugeicons/core-free-icons": "latest",
+    "@hugeicons/react": "latest",
+    "@tauri-apps/api": "^2.11.1",
+    "@tauri-apps/cli": "latest",
+    "@tauri-apps/plugin-dialog": "^2.7.3",
+    "@vitejs/plugin-react": "latest",
+    "lucide-react": "latest",
+    "react": "latest",
+    "react-dom": "latest",
+    "typescript": "latest",
+    "vite": "latest"
+  },
+  "devDependencies": {
+    "@types/node": "latest",
+    "@types/react": "latest",
+    "@types/react-dom": "latest"
+  }
+}
